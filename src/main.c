@@ -1,10 +1,29 @@
 /*
-* We need libs and headers from dependencies from ../glfw-3.3.5.bin.WIN64
+* Dependencies:
+*   1) ../glew-2.1.0-win32
+*   2) ../glfw-3.3.5.bin.WIN64
 */
-#include <GLFW/glfw3.h>
 
 
-int main(int argc, char* argv[])
+
+
+
+
+#include <gl/glew.h>
+#include <gl/glfw3.h>
+
+
+
+
+
+
+/*
+* 1 - Setting up
+* 
+* Uses Windows outdated API to OpenGL
+* to draw a triangle.
+*/
+int first(void)
 {
     GLFWwindow* window;
 
@@ -29,6 +48,15 @@ int main(int argc, char* argv[])
         /* Render here */
         glClear(GL_COLOR_BUFFER_BIT);
 
+        /* My Code */
+        {
+            glBegin(GL_TRIANGLES);
+            glVertex2d(-0.5, -0.5);
+            glVertex2d(0, 0.5);
+            glVertex2d(0.5, -0.5);
+            glEnd();
+        }
+
         /* Swap front and back buffers */
         glfwSwapBuffers(window);
 
@@ -37,7 +65,24 @@ int main(int argc, char* argv[])
     }
 
     glfwTerminate();
+}
 
+
+/*
+* 2 - ...
+*/
+
+
+
+
+
+
+int main(int argc, char* argv[])
+{
+
+
+    if (first())
+        return -1;
 
     return 0;
 }
