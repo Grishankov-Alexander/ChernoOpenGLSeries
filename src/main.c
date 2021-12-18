@@ -8,9 +8,20 @@
 
 
 
+
+#pragma warning(disable : 4996)
+
+
+
+
+
+
+#include "HA_utils.h"
+
 #include <stdio.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <gl/glew.h>
 #include <gl/glfw3.h>
@@ -21,6 +32,10 @@
 
 
 #define DEBUG
+#define WORD_SIZE       64
+#define LINE_SIZE       256
+#define SHADERS_FN      "res/shaders/basic.shader"
+
 
 
 
@@ -34,22 +49,6 @@ typedef struct {
 typedef struct {
     Point2d p1, p2, p3;
 } Triangle;
-
-
-
-
-
-
-static const char* vertex_shader =
-    "#version 330 core\n"
-    "layout(location = 0) in vec4 position;\n"
-    "void main()\n"
-    "{    gl_Position = position;    }\n";
-static const char* fragment_shader =
-    "#version 330 core\n"
-    "out vec4 color;\n"
-    "void main()\n"
-    "{    color = vec4(0.0, 1.0, 0.0, 1.0);    }\n";
 
 
 
@@ -86,6 +85,14 @@ void drawSimpleTriangle(void);
 /* Draw Triangle using modern OpenGL */
 void drawModernTriangle(void);
 
+/*
+* Read shader from stream f
+* 
+* Return shader string allocated on the heap;
+* Return NULL on failure;
+*/
+char *readShader(FILE *f);
+
 
 
 
@@ -93,8 +100,14 @@ void drawModernTriangle(void);
 
 int main(int argc, char* argv[])
 {
-     if (createWindowWithGLEWAndGLFW())
-        return -1;
+    FILE *shaders_file;
+
+    shaders_file = fopen(SHADERS_FN, "r");
+    
+    while (HA_skipLine(shaders_file) != EOF)
+        printf("Skipped line\n");
+
+    fclose(shaders_file);
 
     return 0;
 }
@@ -228,8 +241,8 @@ GLuint createProgram(const char* vshader_str, const char* fshader_str)
     glLinkProgram(program);
 
 #   ifdef DEBUG
-    glValidateProgram(program);
-    /* TODO: check validation status */
+        glValidateProgram(program);
+        /* TODO: check validation status */
 #   endif
 
     glDeleteShader(vs);
@@ -258,6 +271,9 @@ void drawSimpleTriangle(void)
 /* Draw Triangle using modern OpenGL */
 void drawModernTriangle(void)
 {
+    char *vertex_shader;
+    char *fragment_shader;
+    FILE *shaders_file;
     static const Triangle a[2] = {
         {
             -0.25f, 0.50f,
@@ -285,13 +301,117 @@ void drawModernTriangle(void)
         sizeof(Point2d) / sizeof(((Point2d*)0)->x),   /* How much members are in the attribute */
         GL_FLOAT,
         GL_FALSE,
-        sizeof(Point2d),            /* Where to find next vertex attribute*/
-        offsetof(Triangle, p1)      /* Starting Point for vertex attribute */
+        sizeof(Point2d),                    /* Where to find next vertex attribute*/
+        (void *) offsetof(Triangle, p1)     /* Starting Point for vertex attribute */
     );
     glEnableVertexAttribArray(pointattr);
+
+    shaders_file = fopen(SHADERS_FN, "r");
+    vertex_shader = readShader(shaders_file);
+    fragment_shader = readShader(shaders_file);
 
     program = createProgram(vertex_shader, fragment_shader);
     glUseProgram(program);
     glDrawArrays(GL_TRIANGLES, 0, 6);
+
     glDeleteProgram(program);
+    free(vertex_shader);
+    free(fragment_shader);
+    fclose(shaders_file);
+}
+
+
+/*
+* Read shader from stream f
+* 
+* Return shader string allocated on the heap;
+* Return NULL on failure;
+*/
+char *readShader(FILE* f)
+{
+    fpos_t ip, sp; /* initial position, shader position in the file */
+    char word[WORD_SIZE];
+    char *shader; /* Shader string on the heap */
+    char *tmp; /* For shader reallocation */
+    size_t sz_shader; /* Number of bytes allocated for shader */
+    size_t len_shader; /* Number of characters stored in shader */
+
+
+    fgetpos(f, &ip); /* Store Position */
+    sp = ip;
+    strcpy(word,  "");
+    shader = NULL;
+    sz_shader = 0;
+    len_shader = 0;
+    printf("\n\nreadShader() called!\n");
+
+    while (fscanf(f, "%s", word)) { /* Find where the "#shader" begins */
+        printf("word: %s\n", word);
+        fgetc(stdin);
+        if (strcmp(word, "#shader") == 0) /* compare equal */
+            break;
+        (void) (fscanf(f, "%*[^\n]\n") + 1); /* Skip to the next line */
+        fgetpos(f, &sp);
+        continue;
+    }
+    printf("Found a #shader!\n");
+
+    if (strcmp(word, "#shader") != 0) /* word "#shader" not found */
+        goto HANDLE_READ_FAILURE;
+
+    shader = malloc(sz_shader = LINE_SIZE); /* Construct string shader */
+    if (!shader)
+        goto HANDLE_READ_FAILURE;
+
+    fsetpos(f, &sp);
+
+    for ( ; ; ) {
+
+        printf(
+            "Shader size: %zu\n"
+            "Shader length: %zu\n"
+            "Shader mem: %#X\n"
+            , sz_shader, len_shader, shader
+        );
+
+        if (fgets(shader, sz_shader - len_shader, f) != shader) { /* Read The Line into shader */
+            printf("\nEOF reached!!!\n");
+            break;
+
+        }
+        len_shader += strlen(shader);
+        shader += strlen(shader); /* Go to trailing '\0' */
+
+        if (len_shader > sz_shader / 2) { /* Reallocate shader if len_shader > sz_shader / 2 */
+            shader -= len_shader; /* Restore proper memory location */
+            tmp = realloc(shader, sz_shader * 2);
+            if (!tmp) {
+                free(shader);
+                goto HANDLE_READ_FAILURE;
+            }
+            sz_shader *= 2;
+            shader = tmp + len_shader;
+        }
+
+        fgetpos(f, &sp); /* Store file position */
+
+        if (fscanf(f, "#shader")) {
+            printf("New Shader found \n");
+            fsetpos(f, &sp);
+            break;
+        }
+
+    }
+
+    shader -= len_shader; /* Restore proper memory location */
+    tmp = realloc(shader, len_shader + 1); /* don't forget about trailing '\0' */
+    if (tmp)
+        shader = tmp;
+    fprintf(stdout, "\n-------\n%s", shader);
+    return shader;
+
+
+    HANDLE_READ_FAILURE:
+    fsetpos(f, &ip); /* Restore Position */
+    return NULL;
 }
