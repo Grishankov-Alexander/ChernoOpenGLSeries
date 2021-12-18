@@ -100,14 +100,7 @@ char *readShader(FILE *f);
 
 int main(int argc, char* argv[])
 {
-    FILE *shaders_file;
-
-    shaders_file = fopen(SHADERS_FN, "r");
-    
-    while (HA_skipLine(shaders_file) != EOF)
-        printf("Skipped line\n");
-
-    fclose(shaders_file);
+    createWindowWithGLEWAndGLFW();
 
     return 0;
 }
@@ -271,9 +264,9 @@ void drawSimpleTriangle(void)
 /* Draw Triangle using modern OpenGL */
 void drawModernTriangle(void)
 {
-    char *vertex_shader;
-    char *fragment_shader;
     FILE *shaders_file;
+    char *vs; /* vertex shader */
+    char *fs; /* fragment shader */
     static const Triangle a[2] = {
         {
             -0.25f, 0.50f,
@@ -290,6 +283,10 @@ void drawModernTriangle(void)
     GLuint vbo;                             /* Vertex Buffer Object index */
     GLuint program;
 
+    /* Read shader strings from file */
+    shaders_file = fopen(SHADERS_FN, "r");
+    vs = readShader(shaders_file);
+    fs = readShader(shaders_file);
 
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -306,17 +303,13 @@ void drawModernTriangle(void)
     );
     glEnableVertexAttribArray(pointattr);
 
-    shaders_file = fopen(SHADERS_FN, "r");
-    vertex_shader = readShader(shaders_file);
-    fragment_shader = readShader(shaders_file);
-
-    program = createProgram(vertex_shader, fragment_shader);
+    program = createProgram(vs, fs);
     glUseProgram(program);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 
     glDeleteProgram(program);
-    free(vertex_shader);
-    free(fragment_shader);
+    free(vs);
+    free(fs);
     fclose(shaders_file);
 }
 
@@ -336,25 +329,17 @@ char *readShader(FILE* f)
     size_t sz_shader; /* Number of bytes allocated for shader */
     size_t len_shader; /* Number of characters stored in shader */
 
-
-    fgetpos(f, &ip); /* Store Position */
-    sp = ip;
     strcpy(word,  "");
     shader = NULL;
     sz_shader = 0;
     len_shader = 0;
-    printf("\n\nreadShader() called!\n");
+    fgetpos(f, &ip); /* Store Position */
 
-    while (fscanf(f, "%s", word)) { /* Find where the "#shader" begins */
-        printf("word: %s\n", word);
-        fgetc(stdin);
+    while (fscanf(f, "%s", word) != EOF) { /* Find where the "#shader" begins */
+        HA_skipLine(f); /* Skip to the next line */
         if (strcmp(word, "#shader") == 0) /* compare equal */
             break;
-        (void) (fscanf(f, "%*[^\n]\n") + 1); /* Skip to the next line */
-        fgetpos(f, &sp);
-        continue;
     }
-    printf("Found a #shader!\n");
 
     if (strcmp(word, "#shader") != 0) /* word "#shader" not found */
         goto HANDLE_READ_FAILURE;
@@ -363,26 +348,15 @@ char *readShader(FILE* f)
     if (!shader)
         goto HANDLE_READ_FAILURE;
 
-    fsetpos(f, &sp);
-
     for ( ; ; ) {
-
-        printf(
-            "Shader size: %zu\n"
-            "Shader length: %zu\n"
-            "Shader mem: %#X\n"
-            , sz_shader, len_shader, shader
-        );
-
-        if (fgets(shader, sz_shader - len_shader, f) != shader) { /* Read The Line into shader */
-            printf("\nEOF reached!!!\n");
+        
+        if (fgets(shader, sz_shader - len_shader, f) != shader) /* Read The Line into shader */
             break;
-
-        }
+        fgetpos(f, &sp); /* Store file position */
         len_shader += strlen(shader);
         shader += strlen(shader); /* Go to trailing '\0' */
 
-        if (len_shader > sz_shader / 2) { /* Reallocate shader if len_shader > sz_shader / 2 */
+        if (len_shader >= sz_shader / 2) { /* Reallocate shader if len_shader >= sz_shader / 2 */
             shader -= len_shader; /* Restore proper memory location */
             tmp = realloc(shader, sz_shader * 2);
             if (!tmp) {
@@ -393,13 +367,15 @@ char *readShader(FILE* f)
             shader = tmp + len_shader;
         }
 
-        fgetpos(f, &sp); /* Store file position */
-
-        if (fscanf(f, "#shader")) {
-            printf("New Shader found \n");
+        if ( /* Restore file position and break if new #shader found */
+            fscanf(f, "%s", word) == 1
+            && strcmp(word, "#shader") == 0
+        ) {
             fsetpos(f, &sp);
             break;
         }
+
+        fsetpos(f, &sp);
 
     }
 
@@ -407,7 +383,6 @@ char *readShader(FILE* f)
     tmp = realloc(shader, len_shader + 1); /* don't forget about trailing '\0' */
     if (tmp)
         shader = tmp;
-    fprintf(stdout, "\n-------\n%s", shader);
     return shader;
 
 
