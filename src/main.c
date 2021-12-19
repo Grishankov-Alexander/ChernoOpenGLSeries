@@ -55,12 +55,12 @@ typedef struct {
 
 
 
-/*
-* Use GLEW to load OpenGL functions from
-* GPU drivers.
-* Use GLFW to create a Window and drawing context.
-*/
-int createWindowWithGLEWAndGLFW(void);
+GLFWwindow* window; /* Global window variable */
+
+
+
+
+
 
 /*
 * Create and compile shader of type shader_type from shader_str
@@ -93,6 +93,11 @@ void drawModernTriangle(void);
 */
 char *readShader(FILE *f);
 
+/**
+* Draw square using Index Buffers
+*/
+void drawSquare(void);
+
 
 
 
@@ -100,24 +105,6 @@ char *readShader(FILE *f);
 
 int main(int argc, char* argv[])
 {
-    createWindowWithGLEWAndGLFW();
-
-    return 0;
-}
-
-
-
-
-
-
-/*
-* Use GLEW to load OpenGL functions from
-* GPU drivers.
-* Use GLFW to create a Window and drawing context.
-*/
-int createWindowWithGLEWAndGLFW(void)
-{
-    GLFWwindow* window;
     GLenum err;
 
     /* Initialize the library */
@@ -147,33 +134,17 @@ int createWindowWithGLEWAndGLFW(void)
     fprintf(stdout, "Using GLEW %s\n", glewGetString(GLEW_VERSION));
     fprintf(stdout, "Using OpenGL %s\n", glGetString(GL_VERSION));
 
-    /* Loop until the user closes the window */
-    while (!glfwWindowShouldClose(window))
-    {
-        /*
-        *   Rendering Begins Here
-        */
-
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        //drawSimpleTriangle();
-        drawModernTriangle();
-
-        /*
-        *   Rendering Ends Here
-        */
-
-        /* Swap front and back buffers */
-        glfwSwapBuffers(window);
-
-        /* Poll for and process events */
-        glfwPollEvents();
-    }
+    /* Drawing Functions */
+    //drawSimpleTriangle();
+    //drawModernTriangle();
+    drawSquare();
 
     glfwTerminate();
 
     return 0;
 }
+
+
 
 
 
@@ -253,20 +224,32 @@ void drawSimpleTriangle(void)
          0.5, -0.5,
         -0.5, -0.5
     };
-    glBegin(GL_TRIANGLES);
-    glVertex2d(points[0], points[1]);
-    glVertex2d(points[2], points[3]);
-    glVertex2d(points[4], points[5]);
-    glEnd();
+
+    /* Loop until the user closes the window */
+    while (!glfwWindowShouldClose(window))
+    {
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        /* Drawing Calls */
+        glBegin(GL_TRIANGLES);
+        glVertex2d(points[0], points[1]);
+        glVertex2d(points[2], points[3]);
+        glVertex2d(points[4], points[5]);
+        glEnd();
+
+        /* Swap front and back buffers */
+        glfwSwapBuffers(window);
+
+        /* Poll for and process events */
+        glfwPollEvents();
+    }
+
 }
 
 
 /* Draw Triangle using modern OpenGL */
 void drawModernTriangle(void)
 {
-    FILE *shaders_file;
-    char *vs; /* vertex shader */
-    char *fs; /* fragment shader */
     static const Triangle a[2] = {
         {
             -0.25f, 0.50f,
@@ -280,6 +263,9 @@ void drawModernTriangle(void)
         }
     };
     static const GLuint pointattr = 0U;     /* Point Attribute Index */
+    FILE *shaders_file;
+    char *vs; /* vertex shader */
+    char *fs; /* fragment shader */
     GLuint vbo;                             /* Vertex Buffer Object index */
     GLuint program;
 
@@ -287,6 +273,7 @@ void drawModernTriangle(void)
     shaders_file = fopen(SHADERS_FN, "r");
     vs = readShader(shaders_file);
     fs = readShader(shaders_file);
+    fclose(shaders_file);
 
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -305,12 +292,25 @@ void drawModernTriangle(void)
 
     program = createProgram(vs, fs);
     glUseProgram(program);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+
+    /* Loop until the user closes the window */
+    while (!glfwWindowShouldClose(window))
+    {
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        /* Drawing Call */
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        /* Swap front and back buffers */
+        glfwSwapBuffers(window);
+
+        /* Poll for and process events */
+        glfwPollEvents();
+    }
 
     glDeleteProgram(program);
     free(vs);
     free(fs);
-    fclose(shaders_file);
 }
 
 
@@ -349,7 +349,6 @@ char *readShader(FILE* f)
         goto HANDLE_READ_FAILURE;
 
     for ( ; ; ) {
-        
         if (fgets(shader, sz_shader - len_shader, f) != shader) /* Read The Line into shader */
             break;
         fgetpos(f, &sp); /* Store file position */
@@ -376,7 +375,6 @@ char *readShader(FILE* f)
         }
 
         fsetpos(f, &sp);
-
     }
 
     shader -= len_shader; /* Restore proper memory location */
@@ -385,8 +383,80 @@ char *readShader(FILE* f)
         shader = tmp;
     return shader;
 
-
-    HANDLE_READ_FAILURE:
+HANDLE_READ_FAILURE:
     fsetpos(f, &ip); /* Restore Position */
     return NULL;
+}
+
+
+/**
+* Draw square using Index Buffers
+*/
+void drawSquare(void)
+{
+    static const GLfloat points[] = {
+        0.0f, 0.0f, /* Vertex 1 */
+        0.5f, 0.0f, /* Vertex 2 */
+        0.5f, 0.5f, /* Vertex 3 */
+        0.0f, 0.5f, /* Vertex 4 */
+    };
+    /* Will be used to index into points[] */
+    static const GLuint indices[] = {
+        0, 1, 2, /* For the first triangle */
+        2, 3, 0, /* For the second */
+    };
+    static const GLuint pointattr = 0U; /* Point Attribute Index */
+    FILE *shaders_file;
+    char *vs; /* vertex shader */
+    char *fs; /* fragment shader */
+    GLuint vbo; /* Vertex Buffer Object index */
+    GLuint ibo; /* Index Buffer object */
+    GLuint program;
+
+    /* Read shader strings from file */
+    shaders_file = fopen(SHADERS_FN, "r");
+    vs = readShader(shaders_file);
+    fs = readShader(shaders_file);
+    fclose(shaders_file);
+
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(points), points, GL_STATIC_DRAW);
+
+    glGenBuffers(1, &ibo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    /* Array of Points */
+    glVertexAttribPointer(
+        pointattr,
+        2, /* How much members are in the attribute */
+        GL_FLOAT,
+        GL_FALSE,
+        sizeof(GLfloat) * 2, /* Where to find next vertex attribute*/
+        (void *) 0 /* Starting Point for vertex attribute */
+    );
+    glEnableVertexAttribArray(pointattr);
+
+    program = createProgram(vs, fs);
+    glUseProgram(program);
+
+    /* Loop until the user closes the window */
+    while (!glfwWindowShouldClose(window))
+    {
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        /* Drawing Call */
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, NULL);
+
+        /* Swap front and back buffers */
+        glfwSwapBuffers(window);
+
+        /* Poll for and process events */
+        glfwPollEvents();
+    }
+
+    glDeleteProgram(program);
+    free(vs);
+    free(fs);
 }
